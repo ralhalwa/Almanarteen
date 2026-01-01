@@ -63,12 +63,21 @@ func main() {
 	mux.Handle("/budget", auth.RequireAdmin(conn, http.HandlerFunc(eh.SetBudget)))
 	mux.Handle("/dashboard/summary", auth.RequireAdmin(conn, http.HandlerFunc(eh.Summary)))
 
-	// ✅ wrap router with CORS (multiple origins)
-	handler := httpx.CORS([]string{
+	allowedOrigins := []string{
 		"http://localhost:3000",
 		"https://almanarteen-t13d.vercel.app",
-	}, mux)
 
-	log.Println("API running on :8080")
-	log.Fatal(http.ListenAndServe(":8080", handler))
+		// ✅ IMPORTANT: add your ACTUAL preview domain too (the one in your error)
+		"https://almanarteen-t13d-git-main-reems-projects-1ac6dd40.vercel.app",
+	}
+
+	handler := httpx.CORS(allowedOrigins, mux)
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	log.Println("API running on :" + port)
+	log.Fatal(http.ListenAndServe(":"+port, handler))
 }
