@@ -1,32 +1,51 @@
-const API = process.env.NEXT_PUBLIC_API_URL!;
+const API = process.env.NEXT_PUBLIC_API_URL;
 
-export async function apiFetch<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+if (!API) {
+  throw new Error("NEXT_PUBLIC_API_URL is not defined");
+}
+
+export async function apiFetch<T = any>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     ...options,
+    credentials: "include", // ✅ REQUIRED for cookies
     headers: {
-      "Content-Type": "application/json",
       ...(options.headers || {}),
+      "Content-Type": "application/json",
     },
-    credentials: "include",
   });
 
-  const text = await res.text(); // read once
+  const contentType = res.headers.get("content-type");
+  const isJSON = contentType?.includes("application/json");
 
+  // ❌ error handling
   if (!res.ok) {
-    // try JSON error
-    try {
-      const j = JSON.parse(text);
-      throw new Error(j?.error || "Request failed");
-    } catch {
-      throw new Error(text || `Request failed: ${res.status}`);
+    let message = `Request failed: ${res.status}`;
+
+    if (isJSON) {
+      try {
+        const j = await res.json();
+        message = j?.error || message;
+      } catch {}
+    } else {
+      try {
+        const t = await res.text();
+        if (t) message = t;
+      } catch {}
     }
+
+    const err: any = new Error(message);
+    err.status = res.status; // 👈 useful for redirects
+    throw err;
   }
 
-  // success: parse JSON if possible
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    // if backend returns empty body sometimes
-    return {} as T;
+  // ✅ success
+  if (isJSON) {
+    return (await res.json()) as T;
   }
+
+  // backend may return empty body (204 / logout)
+  return {} as T;
 }

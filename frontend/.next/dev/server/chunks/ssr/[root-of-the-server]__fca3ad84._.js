@@ -31,32 +31,43 @@ __turbopack_context__.s([
     ()=>apiFetch
 ]);
 const API = ("TURBOPACK compile-time value", "http://localhost:8080");
+if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
+;
 async function apiFetch(path, options = {}) {
     const res = await fetch(`${API}${path}`, {
         ...options,
+        credentials: "include",
         headers: {
-            "Content-Type": "application/json",
-            ...options.headers || {}
-        },
-        credentials: "include"
-    });
-    const text = await res.text(); // read once
-    if (!res.ok) {
-        // try JSON error
-        try {
-            const j = JSON.parse(text);
-            throw new Error(j?.error || "Request failed");
-        } catch  {
-            throw new Error(text || `Request failed: ${res.status}`);
+            ...options.headers || {},
+            "Content-Type": "application/json"
         }
+    });
+    const contentType = res.headers.get("content-type");
+    const isJSON = contentType?.includes("application/json");
+    // ❌ error handling
+    if (!res.ok) {
+        let message = `Request failed: ${res.status}`;
+        if (isJSON) {
+            try {
+                const j = await res.json();
+                message = j?.error || message;
+            } catch  {}
+        } else {
+            try {
+                const t = await res.text();
+                if (t) message = t;
+            } catch  {}
+        }
+        const err = new Error(message);
+        err.status = res.status; // 👈 useful for redirects
+        throw err;
     }
-    // success: parse JSON if possible
-    try {
-        return JSON.parse(text);
-    } catch  {
-        // if backend returns empty body sometimes
-        return {};
+    // ✅ success
+    if (isJSON) {
+        return await res.json();
     }
+    // backend may return empty body (204 / logout)
+    return {};
 }
 }),
 "[project]/app/login/page.tsx [app-ssr] (ecmascript)", ((__turbopack_context__) => {
